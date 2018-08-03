@@ -111,10 +111,6 @@ class MakeBond(object):
         vdwb = change_data['atoms'][str(typeb)]['vdw']
         change_atom(a,vdwa,change_data['atoms'][str(typea)]['charge'])
         change_atom(b,vdwb,change_data['atoms'][str(typeb)]['charge'])
-        #new_vdw_b = change_data['atoms'][str(typeb)]['vdw'] 
-        #new_label_b = sim.inv_vdw_defs[ new_vdw_b ]
-        #sim.atom_labels[b] = new_label
-        #sim.charges[b] = change_data['atoms'][str(typeb)]['charge']
          
         a_opls_type = self.opls.vdw_type['type'][
                       self.opls.vdw_type['vdw'].index(
@@ -142,8 +138,6 @@ class MakeBond(object):
         aneighbours = self.find_neighbours(a)
         bneighbours = self.find_neighbours(b)        
         neighbours = aneighbours + bneighbours
-        #if len(aneighbours) != 5: raise Exception
-        #if len(bneighbours) != 4: raise Exception
         
         if change_data['neighbours']:
           for n in neighbours:
@@ -158,27 +152,7 @@ class MakeBond(object):
         self.add_new_dihedrals(a,b,aneighbours,bneighbours)
 
         self.update_connection_labels(sim, a,b)
-        #if sim.molecules[a] != sim.molecules[b]:
-        #    mol_to_change = sim.molecules[b]
-        #    for i in range(len(sim.molecules)):
-        #        if sim.molecules[i] == mol_to_change:
-        #            sim.molecules[i] = sim.molecules[a]
         
-        #""" 	
-        for i in range(len(sim.dihedrals)):
-            if sim.dihedral_labels[i] == 0:
-                print sim.dihedrals[i]
-                for atom in sim.dihedrals[i]:
-                    print atom, sim.atom_labels[atom-1]
-                raise Exception
-        for i in range(len(sim.angles)):
-            if sim.angle_labels[i] == 0:
-                print sim.angles[i]
-                for atom in sim.angles[i]:
-                    print atom, sim.atom_labels[atom-1]
-                raise Exception
-	    #"""
-
     def update_connection_labels(self, sim, a, b):
         for thing in ['angle','dihedral']:
             qlist = thing+'s'
@@ -218,11 +192,6 @@ class MakeBond(object):
                         print label
                         self.new_connections[qlist][label] = opls_types
                 sim_qlabels[connection] = label
-                #            print 'NEW',qlist,label,opls_types
-                #if found != 1 and getattr(self.sim,qlabels)[connection] == 0:
-                #    print 'ERROR'
-                #else: print 'FOUND',opls_types
-            #print self.new_connections[qlist] 
 
     def add_new_angles(self,a,b,aneighbours,bneighbours):
         for i in set(aneighbours) - {b}:
@@ -265,7 +234,6 @@ class MakeBond(object):
         for neighbour in neighbours:
             #print 'H search',centre,':',neighbour,sim.masses[sim.atom_labels[neighbour]],sim.atom_labels[neighbour]
             if sim.masses[sim.atom_labels[neighbour]] == 1.008:
-                #self.remove_atom(sim, neighbour)
                 found = True
                 break
         if not found: raise Exception(centre, neighbours)
@@ -290,48 +258,14 @@ class MakeBond(object):
         for q in atom_quantities:
             new_array = np.delete( getattr(sim, q),[a,b])
             setattr( sim, q, new_array)
-        #Squish connectivity labels
-        
-        #def squish(x):
-        #    if x > atom: x -= 1
-        #    return x
-        #squish = lambda x: x-1 if x > atom else x
-        #vsquish = np.vectorize(squish)
-        """
-        connection_types = ['bonds','angles','dihedrals','impropers']
-        for connection_type in connection_types:
-            connections = getattr(sim, connection_type)
-            connections -= np.array(connections > a)
-            connections -= np.array(connections > b)
-        """ 
+    
     def find_neighbours(self, centre):
-        #print '----- find_neighbours', centre,self.sim.atom_labels[centre],'-----'
-        #print 'id',self.sim.ids[centre]
         bonds = np.where(self.sim.bonds==self.sim.ids[centre])
         neighbours = []
         for bond in np.transpose(bonds):
             neighbours += [self.ids2index[self.sim.bonds[bond[0],bond[1]-1]] ]
-        #print 'centre:',centre,', neighbours:',neighbours
-        for a in neighbours:
-            bonds = np.where(self.sim.bonds==self.sim.ids[a])
-            worked = False
-            for bond in np.transpose(bonds):
-                b = self.ids2index[self.sim.bonds[bond[0],bond[1]-1]]
-                bond1 = self.sim.bonds[bond[0],bond[1]]
-                bond2 = self.sim.bonds[bond[0],bond[1]-1] 
-                #print a, b, [bond1,bond2], [self.ids2index[bond1], self.ids2index[bond2]]
-                if b == centre: worked += 1
-            if worked != 1: raise Exception(centre,neighbours)
         return neighbours
     
-    def distance_between_atoms(self,i,j):
-        posi = self.sim.coords[i]
-        posj = self.sim.coords[j]
-        r = 0
-        for k in range(3):
-            r += ( posi[k] - posj[k] ) **2
-        return r
-
     def calc_distance_matrix(self,xyz1,xyz2):
         bx = self.sim.xhi - self.sim.xlo
         by = self.sim.yhi - self.sim.ylo
@@ -342,14 +276,6 @@ class MakeBond(object):
             under= np.array(vec < -half_length)
             return vec + (under * length) - (over * length)
             
-            #for i in range(len(vec)):
-            #    for j in range(len(vec[i])):
-            #        if vec[i,j] > half_length:
-            #            vec[i,j] = vec[i,j] - length
-            #        if vec[i,j] < -half_length:
-            #            vec[i,j] = vec[i,j] + length
-            #return vec
-
         x = xyz2[:,0] - xyz1[:,0,np.newaxis]
         x = check_periodic(x, bx)
         y = xyz2[:,1] - xyz1[:,1,np.newaxis]
@@ -357,14 +283,6 @@ class MakeBond(object):
         z = xyz2[:,2] - xyz1[:,2,np.newaxis]
         z = check_periodic(z, bz)
         return x*x + y*y + z*z
-
-    #def calc_distance_matrix(self,all1,all2):
-    #    x = len(all1); y = len(all2)
-    #    distances = np.zeros((x,y))
-    #    for i in range(x):
-    #        for j in range(y):
-    #            distances[i,j] = self.distance_between_atoms(all1[i],all2[j])
-    #    return distances
 
     def find_all_atoms_with_type(self, label):
         atoms = []
