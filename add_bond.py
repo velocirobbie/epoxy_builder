@@ -1,16 +1,31 @@
+import json
 import numpy as np
 import time
 from write_coords import Writer
+from opls_reader import OPLS_Reader
 
 class MakeBond(object):
-    def __init__(self, sim, atom_type1, atom_type2, change_data,
-            search_radius = 7, outputfile=0, networkfile=0, Nbonds=20):
+    def __init__(self,sim, change_data, 
+            new_connections=False,
+            search_radius = 6, outputfile=0, networkfile=0, Nbonds=20):
+
         self.sim = sim
-        self.a1  = atom_type1
-        self.a2  = atom_type2
+        self.a1  = int(change_data['atoms'].keys()[0])
+        self.a2  = int(change_data['atoms'].keys()[1])
         self.change_data = change_data
         self.r2 = search_radius**2 
         self.networkfile = networkfile
+        
+        self.sim.inv_vdw_defs = {v:k for k,v in self.sim.vdw_defs.items()}
+        
+        if type(new_connections) == str:
+            self.new_connections = json.load(open(new_connections,'r'))
+            for key in self.new_connections:
+                subdict = self.new_connections[key]
+                self.new_connections[key] = {int(k):v for k,v in subdict.items()}
+        else:
+            self.new_connections = {'angles':{},'dihedrals':{}}
+        self.opls = OPLS_Reader('oplsaa.prm')
 
         searching = True
         count = 0
@@ -19,11 +34,7 @@ class MakeBond(object):
             for i in range(len(sim.ids)):
                 self.ids2index[sim.ids[i]] = i
 
-            #self.ids2index = {}
-            #for i, id_ in enumerate(sim.ids):
-            #    self.ids2index[id_] = i
-            
-            print '===new search===='
+            #print '===new search===='
             
             found = False
             all1, xyz1 = self.find_all_atoms_with_type(self.a1)
@@ -34,59 +45,44 @@ class MakeBond(object):
             if min_dist < self.r2:
                 i,j = np.where( distances == min_dist )
                 a,b = all1[int(i)], all2[int(j)]
-                #if (self.sim.atom_labels[a] != self.a1 and
-                #        self.sim.atom_labels[b] != self.b1): raise Exception
-                #print sim.atom_labels[a], sim.atom_labels[b], a,b 
-                #print sim.molecules[a], sim.molecules[b]
-                #print self.find_neighbours(a), self.find_neighbours(b)
                 self.make_bond(self.sim,a,b)
                 count += 1
                 found = True
                 
             if count >= Nbonds: searching = False
             if not found: searching = False
-            """
+        
+        print self.a1, self.a2, 'Bonds made: ', count
+        json.dump(self.new_connections,open('new_connections.json','w'))
+        if outputfile:
+            with open(outputfile,'a') as f:
+                f.write(str(self.a1)+' '+ str(self.a2)+'\t Bonds made: '
+                        + str(count) + '\n')
+
+
+    def make_bond(self,sim,a,b):
+        
+        def remove_hydrogens(a,b):
+            ha = self.find_hydrogen_on(sim,a)
+            hb = self.find_hydrogen_on(sim,b)
+            #print 'removing',ha,hb,self.sim.ids[ha],self.sim.ids[hb]
+            self.remove_atoms(sim, hb,ha)
+            
+            def reorder(i):
+                flag = 0
+                if ha < i: flag += 1 
+                if hb < i: flag += 1
+                return i - flag
+            a = reorder(a)
+            b = reorder(b)
             self.ids2index = np.zeros((max(sim.ids+1)),dtype=int)
             for i in range(len(sim.ids)):
                 self.ids2index[sim.ids[i]] = i
+            return a,b
 
-
-            def distance2(xyz1,xyz2):
-                bx = self.sim.xhi - self.sim.xlo
-                by = self.sim.yhi - self.sim.ylo
-                bz = self.sim.zhi - self.sim.zlo
-                def check_periodic2(vec, length):
-                    half_length = length / 2
-                    over = vec > half_length
-                    under= vec < -half_length
-                    return vec + (under * length) - (over * length)
+        a,b = remove_hydrogens(a,b)
         
-                x = xyz2[0] - xyz1[0]
-                x = check_periodic2(x, bx)
-                y = xyz2[1] - xyz1[1]
-                y = check_periodic2(y, by)
-                z = xyz2[2] - xyz1[2]
-                z = check_periodic2(z, bz)
-                return np.sqrt( x*x + y*y + z*z )
-
-            for i, bond in enumerate(self.sim.bonds):
-                a1 = self.ids2index[bond[0]]
-                a2 = self.ids2index[bond[1]]
-                d = distance2(self.sim.coords[a1],self.sim.coords[a2])
-                #if bond[0] == 54939 and bond[1] == 54941:
-                #    print bond, self.sim.coords[54939], self.sim.coords[54941]
-                if d > 10:
-                    print i,a1,a2,bond,d
-                    print self.sim.coords[a1]
-                    print self.sim.coords[a2]        
-            """
-        print atom_type1, atom_type2, 'Bonds made: ', count
-        if outputfile:
-            with open(outputfile,'a') as f:
-                f.write(str(atom_type1)+' '+ str(atom_type2)+'\t Bonds made: '
-                        + str(count) + '\n')
-
-    def make_bond(self,sim,a,b):
+        
         change_data = self.change_data
         
         typea = sim.atom_labels[a]
@@ -100,13 +96,49 @@ class MakeBond(object):
                         str(sim.molecules[b])+'\t'+
                         str(typea)+'\t'+str(typeb)+'\n')
 
-        sim.bond_labels = np.append(sim.bond_labels,change_data['new_bond'])
+        def change_atom(i,vdwi,charge):
+            try: new_label = sim.inv_vdw_defs[ vdwi ]
+            except KeyError: 
+                new_label = max(sim.vdw_defs.keys())+1
+                sim.vdw_defs[new_label] = vdwi
+                sim.inv_vdw_defs[vdwi] = new_label
+                print 'new_label',new_label
+            sim.atom_labels[i] = new_label
+            sim.charges[i] = charge
+            sim.masses[new_label] = self.opls.mass['m'][vdwi-1]
         
-        sim.atom_labels[a] = change_data['atoms'][str(typea)]['label']
-        sim.charges[a] = change_data['atoms'][str(typea)]['charge']
-        sim.atom_labels[b] = change_data['atoms'][str(typeb)]['label']
-        sim.charges[b] = change_data['atoms'][str(typeb)]['charge']
+        vdwa = change_data['atoms'][str(typea)]['vdw']
+        vdwb = change_data['atoms'][str(typeb)]['vdw']
+        change_atom(a,vdwa,change_data['atoms'][str(typea)]['charge'])
+        change_atom(b,vdwb,change_data['atoms'][str(typeb)]['charge'])
+        #new_vdw_b = change_data['atoms'][str(typeb)]['vdw'] 
+        #new_label_b = sim.inv_vdw_defs[ new_vdw_b ]
+        #sim.atom_labels[b] = new_label
+        #sim.charges[b] = change_data['atoms'][str(typeb)]['charge']
          
+        a_opls_type = self.opls.vdw_type['type'][
+                      self.opls.vdw_type['vdw'].index(
+                      change_data['atoms'][str(typea)]['vdw'])] 
+        b_opls_type = self.opls.vdw_type['type'][
+                      self.opls.vdw_type['vdw'].index(
+                      change_data['atoms'][str(typeb)]['vdw'])] 
+        bond = [a_opls_type,b_opls_type]
+        found_bond = 0
+        for i in range(len(self.opls.bond['a1'])):
+            opls_bond = [self.opls.bond['a1'][i],self.opls.bond['a2'][i]]
+            if bond == opls_bond or bond == list(reversed(opls_bond)):
+                new_coeffs = [ self.opls.bond['k'][i],
+                               self.opls.bond['r'][i]]
+                for coeff in sim.bond_coeffs:
+                    coeff_list= [ sim.bond_coeffs[coeff][1],
+                                  sim.bond_coeffs[coeff][2] ]
+                    if new_coeffs == coeff_list:
+                        sim.bond_labels = np.append(sim.bond_labels,coeff)
+                        found_bond += 1
+        if found_bond == 0: raise Exception(found_bond)
+
+
+
         aneighbours = self.find_neighbours(a)
         bneighbours = self.find_neighbours(b)        
         neighbours = aneighbours + bneighbours
@@ -116,10 +148,12 @@ class MakeBond(object):
         if change_data['neighbours']:
           for n in neighbours:
             typen = sim.atom_labels[n]
-            if str(typen) in change_data['neighbours']:
-                sim.atom_labels[n] =change_data['neighbours'][str(typen)]['label']
-                sim.charges[n] = change_data['neighbours'][str(typen)]['charge']
-        
+            vdw_n = str(sim.vdw_defs[typen])
+            if vdw_n in change_data['neighbours']:
+                new_vdw = change_data['neighbours'][vdw_n]['vdw']
+                new_charge = change_data['neighbours'][vdw_n]['charge']
+                change_atom(n,new_vdw,new_charge)
+
         self.add_new_angles(a,b,aneighbours,bneighbours)
         self.add_new_dihedrals(a,b,aneighbours,bneighbours)
 
@@ -130,11 +164,7 @@ class MakeBond(object):
         #        if sim.molecules[i] == mol_to_change:
         #            sim.molecules[i] = sim.molecules[a]
         
-        ha = self.find_hydrogen_on(sim,a)
-        hb = self.find_hydrogen_on(sim,b)
-        #print 'removing',ha,hb,self.sim.ids[ha],self.sim.ids[hb]
-        self.remove_atoms(sim, hb,ha)
-        """ 	
+        #""" 	
         for i in range(len(sim.dihedrals)):
             if sim.dihedral_labels[i] == 0:
                 print sim.dihedrals[i]
@@ -147,30 +177,52 @@ class MakeBond(object):
                 for atom in sim.angles[i]:
                     print atom, sim.atom_labels[atom-1]
                 raise Exception
-	    """
+	    #"""
+
     def update_connection_labels(self, sim, a, b):
         for thing in ['angle','dihedral']:
             qlist = thing+'s'
             qlabels = thing+'_labels'
 
-            connections  = set(np.where((
+            connectionsa  = set(np.where((
                            getattr(self.sim,qlist)== sim.ids[a]) )[0])
-            connections |= set(np.where((
+            connectionsb = set(np.where((
                            getattr(self.sim,qlist)== sim.ids[b]) )[0])
+            connections = connectionsa & connectionsb
             for connection in connections:
-                types = []
+                atom_labels = []
                 for atom in getattr(self.sim,qlist)[connection]:
-                    types += [self.sim.atom_labels[self.ids2index[atom]]]
+                    atom_labels += [self.sim.atom_labels[self.ids2index[atom]]]
+                opls_vdws = []
+                opls_types = []
+                for label in atom_labels:
+                    opls_vdws += [self.sim.vdw_defs[label] ]
+                for vdw in opls_vdws:
+                    opls_types += [ self.opls.vdw_type['type'][
+                                    self.opls.vdw_type['vdw'].index(vdw)] ]
                 found = 0
-                for datum in self.change_data[qlist]:
-                    data_connection = self.change_data[qlist][datum]
-                    if ( types == data_connection 
-                         or list(reversed(types)) == data_connection ):
-                        found +=1
-                        label = getattr(self.sim,qlabels)#[connection]
-                        label[connection] = datum
-                if found != 1 and getattr(self.sim,qlabels)[connection] == 0:
-                    pass #print 'NOPE',qlist,types
+                #print '==='
+                #print atom_labels
+                #print opls_vdws
+                #print opls_types
+                #print '==='
+                sim_qlabels = getattr(self.sim,qlabels)
+                for new_thing in self.new_connections[qlist]:
+                    types = self.new_connections[qlist][new_thing]
+                    if ( opls_types == types or
+                         opls_types == list(reversed(types)) ):
+                            found += 1
+                            label = new_thing
+                if found == 0:
+                        label = max( sim_qlabels ) + 1
+                        print label
+                        self.new_connections[qlist][label] = opls_types
+                sim_qlabels[connection] = label
+                #            print 'NEW',qlist,label,opls_types
+                #if found != 1 and getattr(self.sim,qlabels)[connection] == 0:
+                #    print 'ERROR'
+                #else: print 'FOUND',opls_types
+            #print self.new_connections[qlist] 
 
     def add_new_angles(self,a,b,aneighbours,bneighbours):
         for i in set(aneighbours) - {b}:

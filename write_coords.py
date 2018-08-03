@@ -7,6 +7,7 @@ class Writer(object):
         # Takes a numpy 3xN array of atom coordinates and outputs
         # them in different formats for viewing/modelling
         self.coords = sim.coords
+        self.ids = sim.ids
         self.atom_labels = sim.atom_labels
         self.natom_types = len(np.unique(self.atom_labels))
         self.molecule = sim.molecules
@@ -23,7 +24,11 @@ class Writer(object):
         if hasattr(sim,'impropers'):
             self.impropers = sim.impropers
             self.improper_labels = sim.improper_labels
-            self.nimproper_types = len(np.unique(self.improper_labels))
+        else:
+            self.impropers = []
+            self.improper_labels = []
+        self.nimproper_types = len(np.unique(self.improper_labels))
+        
         self.size = [sim.xhi-sim.xlo,
                      sim.yhi-sim.ylo,
                      sim.zhi-sim.zlo]
@@ -65,7 +70,7 @@ class Writer(object):
         # atom_type full
         with open(filename,'w') as outfile:
             outfile.write(
-                    '# '+ self.system_name +'\n' +
+                    '# '+ self.system_name +'\n\n' +
                     str(len(self.coords)) +' atoms \n'+
                     str(len(self.bonds)) +' bonds \n'+
                     str(len(self.angles)) +' angles \n'+
@@ -142,7 +147,7 @@ class Writer(object):
             
             for i in range(len(self.coords)):
                 outfile.write(
-                        str(i+1)+'\t ' +             # atom ID
+                        str(self.ids[i])+'\t ' +             # atom ID
                         str(self.molecule[i])+'\t '+ # molecule ID
                         str(self.atom_labels[i])+'\t '+#atom type
                         str(self.charges[i])+'\t '+#atomcharg

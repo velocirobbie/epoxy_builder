@@ -12,7 +12,7 @@ class ReadLammpsData(object):
         """
         self.filename = filename
         self.attributes = {'masses', 'coords', 'molecules', 
-                      'charges', 'atom_labels',
+                      'charges', 'atom_labels','velocities',
                       'xlo', 'xhi', 'ylo', 'yhi', 'zlo', 'zhi',
                       'bonds', 'bond_labels','Nbond_types',
                       'angles', 'angle_labels','Nangle_types',
@@ -156,9 +156,12 @@ class ReadLammpsData(object):
             self.charges[i] = line[3]
 
     def read_velocities(self,datafile):
-        print '--- Ignoring Velocities --- noone cares'
+        self.velocities = np.zeros((self.Natoms,3))
         for i in range(self.Natoms):
             line = self.read(datafile)
+            id_ = int(line[0])
+            if id_ != self.ids[i]: raise Exception('Velocities in wrong order')
+            self.velocities[i] = line[1:4]
 
     def read_data_line(self,datafile,types,atoms):
         line = self.read(datafile)

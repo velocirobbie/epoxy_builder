@@ -1,32 +1,42 @@
 from write_coords import Writer
 from read_lammpsdata import ReadLammpsData
 from add_bond import MakeBond
-import yaml
+from params import Parameterise
+import json
 import sys
-with open('polyout','a') as f:
-    f.write('New epoxy resin formation\n')
+import os.path
+import numpy as np
 
-a = ReadLammpsData(sys.argv[1])#'reactants.data')
-epoxy_phenol = yaml.load(open('epoxy_phenol.yaml'))
-epoxy_amine1 = yaml.load(open('epoxy_amine1.yaml'))
-epoxy_amine2 = yaml.load(open('epoxy_amine2.yaml'))
-b = MakeBond(a,1,20, epoxy_phenol,outputfile = 'polyout')
-b = MakeBond(a,1,6, epoxy_amine1,outputfile = 'polyout')
-b = MakeBond(a,1,24, epoxy_amine2,outputfile = 'polyout')
 
-"""
-c = ['bonds','angles','dihedrals']
-for attr in c:
-    print 'testing', thing
-    thing = getattr(a,attr)
-    for i in thing:
-        sum_ = 0
-        for j in range(3):
-            sum_ += (a.coords[c,j] - a.coords[d,j])**2
-        if sum_ > 100:
-            print attr,i,sum_
-"""
+lammps_sim_file       = sys.argv[1]
+vdw_defs              = sys.argv[2]
+polymerisation_config = sys.argv[3]
 
-output = Writer(a)
-output.write_xyz()
-output.write_lammps()
+lammps_sim = ReadLammpsData( lammps_sim_file )
+
+lammps_sim.vdw_defs = json.load(open( vdw_defs )) 
+lammps_sim.vdw_defs = {int(k):v for k,v in lammps_sim.vdw_defs.items()}
+
+config = json.load(open( polymerisation_config ))
+
+# If this is part of an itterative polymerisation, check if new connecions
+# have been made so they don't need to be parameterised every time
+if os.path.isfile('new_connections.json'):
+    new_connections = 'new_connections.json'
+else:
+    new_connections = {'angles':{},'dihedrals':{}}
+
+b = MakeBond(lammps_sim, 
+                config, Nbonds = 20,
+                outputfile = 'polyout',
+                new_connections=new_connections,
+                networkfile = 'nx.dat')
+Parameterise(lammps_sim, lammps_sim.vdw_defs, b.new_connections)
+
+json.dump(lammps_sim.vdw_defs,open('vdw.json','w'))
+
+output = Writer(lammps_sim,'polymerised')
+output.write_xyz('polymerised.data')
+output.write_lammps('polymerised.data')
+
+
