@@ -102,7 +102,7 @@ class MakeBond(object):
                 new_label = max(sim.vdw_defs.keys())+1
                 sim.vdw_defs[new_label] = vdwi
                 sim.inv_vdw_defs[vdwi] = new_label
-                print 'new_label',new_label
+                #print 'new_label',new_label
             sim.atom_labels[i] = new_label
             sim.charges[i] = charge
             sim.masses[new_label] = self.opls.mass['m'][vdwi-1]

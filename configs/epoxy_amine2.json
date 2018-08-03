@@ -1,1 +1,1 @@
-{"new_bond": 24, "neighbours": {"85": {"charge": 0.06, "vdw": 741}, "742": {"charge": 0.15, "vdw": 745}}, "atoms": {"33": {"charge": -0.66, "vdw": 732}, "18": {"charge": 0.14, "vdw": 737}}}
+{"atoms": {"18": {"vdw": 737, "charge": 0.14}, "33": {"vdw": 732, "charge": -0.66}}, "neighbours": {"742": {"vdw": 745, "charge": 0.15}, "85": {"vdw": 741, "charge": 0.06}}}

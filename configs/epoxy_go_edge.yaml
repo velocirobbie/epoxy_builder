@@ -1,5 +1,3 @@
-new_bond: 24
-
 atoms:
     18:              # (13) CH2O 
         vdw: 124
